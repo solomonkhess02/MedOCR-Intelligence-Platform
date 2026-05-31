@@ -1,0 +1,54 @@
+# ── Core Framework ────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.18
+python-dotenv==1.0.1
+
+# ── Database ──────────────────────────────────────────────
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+psycopg2-binary==2.9.10
+alembic==1.14.0
+pgvector==0.3.6
+
+# ── Task Queue ────────────────────────────────────────────
+celery[redis]==5.4.0
+redis==5.2.0
+flower==2.0.1                    # Celery monitoring UI
+
+# ── ML / OCR Models ──────────────────────────────────────
+torch==2.7.0
+torchvision==0.22.0
+transformers==4.52.3
+datasets==3.6.0
+Pillow==11.2.1
+opencv-python==4.11.0.86
+numpy>=1.26.0,<2.1          # evidently requires numpy<2.1
+
+# ── Embeddings ────────────────────────────────────────────
+sentence-transformers==3.3.1
+
+# ── MLOps ─────────────────────────────────────────────────
+mlflow==2.22.0
+evidently>=0.6.0            # numpy<2.1 constraint — pip will resolve compatible version
+
+# ── Agent / LLM ───────────────────────────────────────────
+langchain==0.3.25
+langgraph==0.4.8
+langchain-google-genai>=2.0.0
+google-generativeai>=0.8.0
+
+# ── PDF Generation ────────────────────────────────────────
+reportlab==4.2.5
+
+# ── Validation & Safety ──────────────────────────────────
+sqlparse==0.5.3
+pydantic==2.11.5
+pydantic-settings==2.9.1
+
+# ── Utilities ─────────────────────────────────────────────
+httpx==0.28.1
+websockets==15.0.1
+aiofiles==24.1.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4

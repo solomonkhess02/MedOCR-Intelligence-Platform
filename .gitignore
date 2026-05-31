@@ -129,3 +129,7 @@ dist/
 
 # ── Docker ────────────────────────────────────────────────────
 docker-compose.override.yml
+
+# ── Guides & Plans ────────────────────────────────────────────
+phase1_implementation_guide.md
+implementation_plan.md
