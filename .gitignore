@@ -132,4 +132,5 @@ docker-compose.override.yml
 
 # ── Guides & Plans ────────────────────────────────────────────
 phase1_implementation_guide.md
+phase1_deep_dive_guide.md
 implementation_plan.md

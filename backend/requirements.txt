@@ -24,6 +24,9 @@ datasets==3.6.0
 Pillow==11.2.1
 opencv-python==4.11.0.86
 numpy>=1.26.0,<2.1          # evidently requires numpy<2.1
+accelerate==0.34.2          # required for HuggingFace Trainer
+evaluate==0.4.3             # required for computing CER/WER
+jiwer==3.0.4                # required by evaluate for CER/WER
 
 # ── Embeddings ────────────────────────────────────────────
 sentence-transformers==3.3.1

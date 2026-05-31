@@ -53,15 +53,9 @@ services:
     environment:
       MLFLOW_BACKEND_STORE_URI: sqlite:////mlflow/artifacts/mlflow.db
       MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
-    command: >
-      bash -c "pip install mlflow --quiet &&
-               mlflow server
-               --backend-store-uri sqlite:////mlflow/artifacts/mlflow.db
-               --default-artifact-root /mlflow/artifacts
-               --host 0.0.0.0
-               --port 5000"
+    command: bash -c "pip install mlflow==2.15.1 --quiet && rm -f /mlflow/artifacts/mlflow.db && mlflow server --backend-store-uri sqlite:////mlflow/artifacts/mlflow.db --default-artifact-root /mlflow/artifacts --host 0.0.0.0 --port 5000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 30s
       timeout: 10s
       retries: 5

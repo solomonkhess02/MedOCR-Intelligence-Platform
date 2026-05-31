@@ -21,6 +21,9 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+import os
+from pathlib import Path
+
 MODEL_NAME = "microsoft/trocr-base-handwritten"
 MODEL_VERSION_TAG = "trocr-prescription-v1"
 MLFLOW_EXPERIMENT = "TrOCR-Prescription"
@@ -29,6 +32,10 @@ MLFLOW_EXPERIMENT = "TrOCR-Prescription"
 _processor: Optional[TrOCRProcessor] = None
 _model: Optional[VisionEncoderDecoderModel] = None
 _device: Optional[torch.device] = None
+
+# Base path for local fine-tuned models
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+FINETUNED_MODEL_DIR = PROJECT_ROOT / "models" / "trocr-finetuned"
 
 
 @dataclass
@@ -47,14 +54,26 @@ def _get_device() -> torch.device:
 
 def load_model() -> None:
     """Load TrOCR processor and model into memory. Called once at worker startup."""
-    global _processor, _model, _device
+    global _processor, _model, _device, MODEL_VERSION_TAG, MODEL_NAME
     if _model is not None:
         return  # Already loaded
 
-    logger.info(f"Loading TrOCR model: {MODEL_NAME}")
     _device = _get_device()
-    _processor = TrOCRProcessor.from_pretrained(MODEL_NAME)
-    _model = VisionEncoderDecoderModel.from_pretrained(MODEL_NAME).to(_device)
+    
+    # Check if a fine-tuned model exists locally
+    if FINETUNED_MODEL_DIR.exists() and (FINETUNED_MODEL_DIR / "config.json").exists():
+        model_path = str(FINETUNED_MODEL_DIR)
+        MODEL_NAME = "local-finetuned/trocr"
+        MODEL_VERSION_TAG = "trocr-prescription-v2-finetuned"
+        logger.info(f"Loading FINE-TUNED TrOCR model from {model_path}")
+    else:
+        model_path = "microsoft/trocr-base-handwritten"
+        MODEL_NAME = "microsoft/trocr-base-handwritten"
+        MODEL_VERSION_TAG = "trocr-prescription-v1-base"
+        logger.info(f"Loading BASE TrOCR model: {model_path}")
+
+    _processor = TrOCRProcessor.from_pretrained(model_path)
+    _model = VisionEncoderDecoderModel.from_pretrained(model_path).to(_device)
     _model.eval()
     logger.info(f"TrOCR loaded on {_device}")
 
