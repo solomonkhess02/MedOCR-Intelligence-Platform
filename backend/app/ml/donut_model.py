@@ -105,7 +105,9 @@ def run_inference(image_path: str) -> DonutOutput:
         logger.error(f"Failed to open image {image_path}: {e}")
         raise
 
-    # Donut uses a task-specific decoder prompt
+    # Task prompt tells Donut which output schema to use.
+    # cord-v2 covers receipt/structured-doc fields (amounts, dates, line items).
+    # TODO Phase 2: replace with a custom task prompt if fine-tuning on medical invoices.
     task_prompt = "<s_cord-v2>"
     decoder_input_ids = _processor.tokenizer(
         task_prompt, add_special_tokens=False, return_tensors="pt"
@@ -118,7 +120,8 @@ def run_inference(image_path: str) -> DonutOutput:
             pixel_values,
             decoder_input_ids=decoder_input_ids,
             max_length=_model.decoder.config.max_position_embeddings,
-            early_stopping=True,
+            # early_stopping is omitted intentionally: it causes a deprecation warning
+            # when num_beams=1 (greedy decode). Set num_beams>=2 to use early_stopping.
             pad_token_id=_processor.tokenizer.pad_token_id,
             eos_token_id=_processor.tokenizer.eos_token_id,
             use_cache=True,

@@ -168,6 +168,8 @@ def _compute_cer_wer(hypothesis: str, reference: str) -> tuple[float, float]:
 
     hyp_words = hypothesis.split()
     ref_words = reference.split()
+    # levenshtein() works on both str and list via duck-typing:
+    # len(), enumerate(), and element != comparison all work on lists of words.
     wer = levenshtein(hyp_words, ref_words) / max(len(ref_words), 1)
 
     return round(cer, 4), round(wer, 4)

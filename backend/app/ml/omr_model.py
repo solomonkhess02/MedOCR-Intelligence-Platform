@@ -82,7 +82,9 @@ def _cluster_into_grid(
 ) -> list[dict]:
     """
     Cluster detected marks into a grid to assign row/column positions.
-    Returns list of {row, col, x, y, confidence} dicts.
+    Returns list of {mark_index, x, y, width, height, fill_confidence} dicts.
+    Note: row/col grid assignment is deferred to Phase 2 when form templates
+    are available. Currently marks are indexed by detection order (top→bottom, left→right).
     """
     if not mark_contours:
         return []
