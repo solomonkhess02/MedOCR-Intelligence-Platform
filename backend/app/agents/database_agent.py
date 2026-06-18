@@ -14,12 +14,12 @@ from uuid import UUID
 import sqlparse
 from sqlalchemy import text
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.config import get_settings
 from app.database import SyncSessionLocal
 from app.models.agent_activity import AgentActivity
 from app.services import embedding_service
+from app.services.llm_provider import get_llm, has_llm_api_key, get_model_name
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -69,16 +69,13 @@ def run_database_agent(user_query: str) -> str:
     Routes queries to SQL, pgvector similarity search, or hybrid search.
     """
     start_time = time.perf_counter()
-    llm_model = settings.gemini_model or "gemini-2.0-flash"
+    llm_model = get_model_name()
     prompt_tokens = 0
     completion_tokens = 0
     status = "success"
 
-    # Check for valid Google API Key
-    has_api_key = (
-        settings.google_api_key and 
-        "your-gemini-api" not in settings.google_api_key
-    )
+    # Check for valid LLM API key
+    has_api_key = has_llm_api_key()
 
     # ── Step 1: Intent Classification ─────────────────────────────────────────
     intent = _classify_intent(user_query, has_api_key, llm_model)
@@ -144,7 +141,7 @@ def _classify_intent(query: str, has_api_key: bool, llm_model: str) -> str:
         return "rag"
 
     try:
-        llm = ChatGoogleGenerativeAI(model=llm_model, google_api_key=settings.google_api_key, temperature=0.0)
+        llm = get_llm(temperature=0.0)
         prompt = ChatPromptTemplate.from_messages([
             ("system", (
                 "You are an intent classifier. Categorize the user's database query into one of three intents:\n"
@@ -175,7 +172,7 @@ def _generate_sql(query: str, has_api_key: bool, llm_model: str) -> Optional[str
         return "SELECT count(*) FROM documents;"
 
     try:
-        llm = ChatGoogleGenerativeAI(model=llm_model, google_api_key=settings.google_api_key, temperature=0.0)
+        llm = get_llm(temperature=0.0)
         prompt = ChatPromptTemplate.from_messages([
             ("system", (
                 "You are a PostgreSQL expert. Generate a SQL query that retrieves data to answer the user request. "
@@ -261,7 +258,9 @@ def _execute_similarity_search(query: str) -> List[Dict[str, Any]]:
         """
         
         with SyncSessionLocal() as db:
-            result = db.execute(text(sql), {"query_emb": str(query_emb)})
+            # pgvector requires "[v1,v2,...]" format — str() produces Python repr with spaces
+            emb_str = "[" + ",".join(str(v) for v in query_emb) + "]"
+            result = db.execute(text(sql), {"query_emb": emb_str})
             for row in result:
                 results.append({
                     "document_id": str(row.document_id),
@@ -306,8 +305,8 @@ def _synthesize_response(
             return f"Hybrid search result: SQL returned {len(sql_results)} rows, RAG returned {len(rag_results)} chunks."
 
     try:
-        llm = ChatGoogleGenerativeAI(model=llm_model, google_api_key=settings.google_api_key, temperature=0.2)
-        
+        llm = get_llm(temperature=0.2)
+
         prompt = ChatPromptTemplate.from_messages([
             ("system", (
                 "You are the Database Agent (Agent 02) for the MedOCR Intelligence Platform. "

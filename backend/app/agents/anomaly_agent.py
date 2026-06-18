@@ -118,10 +118,11 @@ def _check_duplicate_invoice(document_id: UUID, invoice_no: str) -> Optional[dic
 def _check_cost_outlier(document_id: UUID, amount: float) -> Optional[dict]:
     """Checks if invoice amount is a statistical outlier (> mean + 3σ)."""
     sql = (
-        "SELECT (entity_data->>'amount')::float as amt "
+        "SELECT NULLIF(entity_data->>'amount', '')::float as amt "
         "FROM extracted_entities "
         "WHERE entity_type = 'invoice' AND document_id != :doc_id "
-        "AND (entity_data->>'amount') IS NOT NULL;"
+        "AND NULLIF(entity_data->>'amount', '') IS NOT NULL "
+        "AND entity_data->>'amount' ~ '^[0-9]+(\\.[0-9]+)?$';"
     )
     try:
         with SyncSessionLocal() as db:

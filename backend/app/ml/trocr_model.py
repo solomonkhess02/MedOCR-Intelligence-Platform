@@ -6,9 +6,11 @@ Logs each inference run to MLflow.
 See: medocr_architecture_v3.md §6 — Model Assignment by Document Type
 """
 
+import os
 import time
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import mlflow
@@ -20,9 +22,6 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-import os
-from pathlib import Path
 
 MODEL_NAME = "microsoft/trocr-base-handwritten"
 MODEL_VERSION_TAG = "trocr-prescription-v1"
@@ -78,21 +77,33 @@ def load_model() -> None:
     logger.info(f"TrOCR loaded on {_device}")
 
 
-def _compute_confidence(generated_ids: torch.Tensor) -> float:
+def _compute_confidence(generate_output) -> float:
     """
-    Estimate confidence from token generation.
-    TrOCR doesn't natively output per-token probabilities in standard usage,
-    so we use a heuristic: text length relative to expected prescription length.
-    Phase 2 will add beam score extraction for true confidence.
+    Compute a real model-derived confidence from the decoder's token probabilities.
+
+    Uses `compute_transition_scores` to recover the per-token log-probabilities of the
+    generated sequence (normalized over the vocabulary), then returns the geometric
+    mean of those probabilities: exp(mean(token_logprobs)). This is in [0, 1] and
+    reflects how confident the model actually was at each decoding step — a low value
+    means the model was unsure, which is exactly what the confidence gate needs.
+
+    Returns 0.0 if scores are unavailable (so the document fails honestly to review).
     """
-    text_len = generated_ids.shape[-1]
-    # Prescriptions typically 50–400 tokens; shorter outputs get lower confidence
-    if text_len < 5:
-        return 0.40
-    elif text_len < 20:
-        return 0.65
-    else:
-        return 0.88  # Heuristic until beam scores are extracted
+    try:
+        transition_scores = _model.compute_transition_scores(
+            generate_output.sequences,
+            generate_output.scores,
+            normalize_logits=True,
+        )
+        # First (only) sequence in the batch; drop any non-finite padding steps.
+        token_logprobs = transition_scores[0]
+        finite = token_logprobs[torch.isfinite(token_logprobs)]
+        if finite.numel() == 0:
+            return 0.0
+        return round(float(torch.exp(finite.mean()).item()), 4)
+    except Exception as e:
+        logger.warning(f"Could not compute model confidence ({e}); failing to 0.0")
+        return 0.0
 
 
 def run_inference(image_path: str, ground_truth_text: Optional[str] = None) -> OcrOutput:
@@ -119,12 +130,17 @@ def run_inference(image_path: str, ground_truth_text: Optional[str] = None) -> O
     pixel_values = _processor(images=image, return_tensors="pt").pixel_values.to(_device)
 
     with torch.no_grad():
-        generated_ids = _model.generate(pixel_values)
+        generate_output = _model.generate(
+            pixel_values,
+            output_scores=True,
+            return_dict_in_generate=True,
+        )
 
+    generated_ids = generate_output.sequences
     raw_text = _processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
     latency_ms = int((time.perf_counter() - start_time) * 1000)
 
-    confidence = _compute_confidence(generated_ids)
+    confidence = _compute_confidence(generate_output)
 
     # CER/WER require ground truth — only computed during evaluation runs
     cer: Optional[float] = None

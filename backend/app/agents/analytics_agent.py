@@ -12,11 +12,11 @@ from uuid import UUID
 
 from sqlalchemy import text
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.config import get_settings
 from app.database import SyncSessionLocal
 from app.models.agent_activity import AgentActivity
+from app.services.llm_provider import get_llm, has_llm_api_key, get_model_name
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -30,7 +30,7 @@ def run_analytics_agent(document_id: UUID) -> str:
     Runs SQL aggregates and returns a plain-English BI insights summary.
     """
     start_time = time.perf_counter()
-    llm_model = settings.gemini_model or "gemini-2.0-flash"
+    llm_model = get_model_name()
     prompt_tokens = 0
     completion_tokens = 0
     status = "success"
@@ -39,15 +39,12 @@ def run_analytics_agent(document_id: UUID) -> str:
     # ── Step 1: Run SQL Aggregations ──────────────────────────────────────────
     stats = _retrieve_database_stats()
 
-    # Check for valid Google API Key
-    has_api_key = (
-        settings.google_api_key and 
-        "your-gemini-api" not in settings.google_api_key
-    )
+    # Check for valid LLM API key
+    has_api_key = has_llm_api_key()
 
     if not has_api_key:
         # ── Fallback Simulation Mode ─────────────────────────────────────────
-        logger.info("No active GOOGLE_API_KEY found. Running Agent-03 in simulation mode.")
+        logger.info("No active DEEPSEEK_API_KEY found. Running Agent-03 in simulation mode.")
         time.sleep(0.1)
         analytics_report = _generate_mock_analytics_report(stats)
         prompt_tokens = len(str(stats)) // 4
@@ -55,11 +52,7 @@ def run_analytics_agent(document_id: UUID) -> str:
     else:
         # ── Real LLM Execution Mode ──────────────────────────────────────────
         try:
-            llm = ChatGoogleGenerativeAI(
-                model=llm_model,
-                google_api_key=settings.google_api_key,
-                temperature=0.2
-            )
+            llm = get_llm(temperature=0.2)
 
             prompt = ChatPromptTemplate.from_messages([
                 ("system", (

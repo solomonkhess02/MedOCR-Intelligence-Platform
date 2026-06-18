@@ -12,11 +12,11 @@ from typing import Dict, Any, Tuple
 from uuid import UUID
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.config import get_settings
 from app.database import SyncSessionLocal
 from app.models.agent_activity import AgentActivity
+from app.services.llm_provider import get_llm, has_llm_api_key, get_model_name
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -45,7 +45,7 @@ def run_medical_summary_agent(
         (summary_text, guardrail_blocked_boolean)
     """
     start_time = time.perf_counter()
-    llm_model = settings.gemini_model or "gemini-2.0-flash"
+    llm_model = get_model_name()
     prompt_tokens = 0
     completion_tokens = 0
     status = "success"
@@ -56,15 +56,12 @@ def run_medical_summary_agent(
     if doc_type not in ["prescription", "lab_report"]:
         return "Non-medical document. Medical summary skipped.", False
 
-    # Check for valid Google API Key
-    has_api_key = (
-        settings.google_api_key and 
-        "your-gemini-api" not in settings.google_api_key
-    )
+    # Check for valid LLM API key
+    has_api_key = has_llm_api_key()
 
     if not has_api_key:
         # ── Fallback Simulation Mode ─────────────────────────────────────────
-        logger.info("No active GOOGLE_API_KEY found. Running Agent-05 in simulation mode.")
+        logger.info("No active DEEPSEEK_API_KEY found. Running Agent-05 in simulation mode.")
         time.sleep(0.1)
         summary = _generate_mock_medical_summary(doc_type, extracted_entities)
         prompt_tokens = len(str(extracted_entities)) // 4
@@ -72,11 +69,7 @@ def run_medical_summary_agent(
     else:
         # ── Real LLM Execution Mode ──────────────────────────────────────────
         try:
-            llm = ChatGoogleGenerativeAI(
-                model=llm_model,
-                google_api_key=settings.google_api_key,
-                temperature=0.0  # Zero temperature for maximum reliability
-            )
+            llm = get_llm(temperature=0.0)  # Zero temperature for maximum reliability
 
             prompt = ChatPromptTemplate.from_messages([
                 ("system", (
@@ -119,12 +112,8 @@ def run_medical_summary_agent(
     # Tier 2: LLM Auditor check (if API key is active and not already blocked)
     if not guardrail_blocked and has_api_key:
         try:
-            auditor_llm = ChatGoogleGenerativeAI(
-                model=llm_model,
-                google_api_key=settings.google_api_key,
-                temperature=0.0
-            )
-            
+            auditor_llm = get_llm(temperature=0.0)
+
             auditor_prompt = ChatPromptTemplate.from_messages([
                 ("system", (
                     "You are a strict medical safety auditor. Your job is to check summaries of medical tests "

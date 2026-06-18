@@ -6,6 +6,10 @@ normalizes coordinates, runs LayoutLMv3 representation learning,
 and outputs structured biomarker JSON.
 """
 
+import os
+# Must be set before mlflow is imported so its HTTP client picks up the timeout
+os.environ["MLFLOW_HTTP_REQUEST_TIMEOUT"] = "2"
+
 import time
 import json
 import logging
@@ -13,12 +17,9 @@ import re
 from dataclasses import dataclass
 from typing import Optional, Tuple, List
 
-import os
 import mlflow
 import torch
 from PIL import Image
-
-os.environ["MLFLOW_HTTP_REQUEST_TIMEOUT"] = "2"
 
 from app.config import get_settings
 
@@ -89,6 +90,10 @@ def _extract_words_and_boxes(
     # ── Stage 1: PyTesseract ──────────────────────────────────────────────────
     try:
         import pytesseract
+        # Honor an explicit Tesseract binary path from config (Windows installs are
+        # often not on PATH); in Docker tesseract-ocr is on PATH so this stays blank.
+        if settings.tesseract_cmd:
+            pytesseract.pytesseract.tesseract_cmd = settings.tesseract_cmd
         # We run image_to_data to get word-level coordinates
         data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
         n_boxes = len(data["text"])
@@ -165,32 +170,16 @@ def _extract_words_and_boxes(
         except Exception as e:
             logger.warning(f"Gemini OCR extraction failed: {e}")
 
-    # ── Stage 3: High-Fidelity Mock Extractor (Self-contained) ────────────────
-    logger.info("Falling back to high-fidelity mock layout extraction.")
-    # Standard mock medical lab report contents
-    mock_lab_report = (
-        "Jane Doe Female Age: 42 Date: 2026-06-01 "
-        "PATIENT REPORT METABOLIC PANEL "
-        "Glucose 180 mg/dL Reference: 70-100 Status: HIGH "
-        "HbA1c 8.1 % Reference: <5.7 Status: HIGH "
-        "WBC 11.2 K/uL Reference: 4.5-11.0 Status: HIGH "
-        "CLINICAL LABORATORY SERVICES INC"
+    # ── Stage 3: No OCR available — fail honestly ─────────────────────────────
+    # If neither Tesseract nor the Gemini vision fallback could read the image, we
+    # do NOT fabricate medical content. Returning empty extraction yields low
+    # confidence downstream, routing the document to 'needs_review' (the honest
+    # outcome for a medical document we could not actually read).
+    logger.warning(
+        "No OCR backend available for LayoutLMv3 (Tesseract not installed and no "
+        "Gemini vision key). Returning empty extraction — document will fail to review."
     )
-    words = mock_lab_report.split()
-    
-    # Generate mock coordinates spread across a grid
-    n = len(words)
-    for i, word in enumerate(words):
-        row = i // 5
-        col = i % 5
-        xmin = col * 200
-        ymin = row * 80
-        xmax = xmin + 150
-        ymax = ymin + 40
-        boxes.append([xmin, ymin, xmax, ymax])
-
-    raw_text = mock_lab_report
-    return words, boxes, raw_text
+    return [], [], ""
 
 
 def _parse_biomarkers(raw_text: str) -> dict:
@@ -199,16 +188,21 @@ def _parse_biomarkers(raw_text: str) -> dict:
     Looks for Glucose, HbA1c, WBC and reference ranges.
     """
     result = {
-        "patient": "Jane Doe",
+        "patient": "Unknown",
         "glucose": "Unknown",
         "hba1c": "Unknown",
         "wbc": "Unknown",
+        # Static clinical reference ranges (general medical knowledge, not patient data).
         "reference_ranges": {
             "glucose": "70–100 mg/dL",
             "hba1c": "<5.7%",
             "wbc": "4.5–11.0 K/µL"
         }
     }
+
+    # No text extracted → nothing to parse; return all-Unknown (fail honestly).
+    if not raw_text or not raw_text.strip():
+        return result
 
     # Extract patient if present
     patient_match = re.search(r"patient[:\s]+([A-Za-z\s]+?)(?:age|date|glucose|hba1c|$)", raw_text, re.IGNORECASE)
@@ -248,14 +242,6 @@ def _parse_biomarkers(raw_text: str) -> dict:
         wbc_match_num = re.search(r"wbc\s+(\d+(?:\.\d+)?)", raw_text, re.IGNORECASE)
         if wbc_match_num:
             result["wbc"] = f"{wbc_match_num.group(1).strip()} K/µL"
-
-    # Fallback default values if parsing returned nothing
-    if result["glucose"] == "Unknown" and "180" in raw_text:
-        result["glucose"] = "180 mg/dL"
-    if result["hba1c"] == "Unknown" and "8.1" in raw_text:
-        result["hba1c"] = "8.1%"
-    if result["wbc"] == "Unknown" and "11.2" in raw_text:
-        result["wbc"] = "11.2 K/µL"
 
     return result
 
@@ -312,12 +298,16 @@ def run_inference(image_path: str) -> LayoutLMOutput:
     # ── Step 3: Structured biomarker extraction ─────────────────────────────
     structured = _parse_biomarkers(raw_text)
 
-    # Confidence calculation:
-    # Heuristic based on number of successfully extracted values
-    val_count = sum(1 for k in ["glucose", "hba1c", "wbc"] if structured[k] != "Unknown")
-    confidence = 0.50 + (val_count * 0.15)  # Max 0.95
-    if not model_inference_success:
-        confidence = min(confidence, 0.70)  # Cap if transformer failed
+    # Confidence calculation (heuristic — LayoutLMv3 has no single decode probability
+    # like TrOCR; based on how many expected biomarker fields were actually parsed).
+    if not raw_text or not raw_text.strip():
+        # Nothing was read from the image — fail honestly to review.
+        confidence = 0.0
+    else:
+        val_count = sum(1 for k in ["glucose", "hba1c", "wbc"] if structured[k] != "Unknown")
+        confidence = 0.40 + (val_count * 0.18)  # 0.40 (text but no fields) → 0.94 (all 3)
+        if not model_inference_success:
+            confidence = min(confidence, 0.70)  # Cap if the transformer forward pass failed
 
     output = LayoutLMOutput(
         raw_text=raw_text,

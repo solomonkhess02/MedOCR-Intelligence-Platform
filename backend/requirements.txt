@@ -38,8 +38,15 @@ evidently>=0.6.0            # numpy<2.1 constraint — pip will resolve compatib
 # ── Agent / LLM ───────────────────────────────────────────
 langchain==0.3.25
 langgraph==0.4.8
+# DeepSeek (OpenAI-compatible) is the agent-layer LLM provider.
+# Pin to the 0.3.x line to stay compatible with langchain-core 0.3.x.
+langchain-openai>=0.3,<0.4
+openai>=1.104.0
+# Gemini retained only for the LayoutLMv3 vision-OCR bounding-box fallback.
 langchain-google-genai>=2.0.0
 google-generativeai>=0.8.0
+# Required by the Donut tokenizer (XLMRoberta/sentencepiece-based).
+sentencepiece>=0.2.0
 
 # ── PDF Generation ────────────────────────────────────────
 reportlab==4.2.5
