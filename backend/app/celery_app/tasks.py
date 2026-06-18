@@ -313,22 +313,17 @@ def _extract_prescription_entities(raw_text: str) -> dict:
         "date": "N/A",
     }
     
-    # Check if we can use Gemini to extract structured fields
-    settings = get_settings()
-    has_api_key = settings.google_api_key and "your-gemini-api" not in settings.google_api_key
-    
+    # Check if we can use the configured LLM to extract structured fields
+    from app.services.llm_provider import get_llm, has_llm_api_key
+    has_api_key = has_llm_api_key()
+
     if has_api_key:
         try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.prompts import ChatPromptTemplate
             import json
-            
-            llm = ChatGoogleGenerativeAI(
-                model=settings.gemini_model,
-                google_api_key=settings.google_api_key,
-                temperature=0.0
-            )
-            
+
+            llm = get_llm(temperature=0.0)
+
             prompt = ChatPromptTemplate.from_messages([
                 ("system", (
                     "You are a clinical entity extractor. Extract the following fields from the prescription text:\n"
@@ -366,17 +361,16 @@ def _extract_prescription_entities(raw_text: str) -> dict:
     if date_match:
         result["date"] = date_match.group(1)
         
-    # Medications & instructions
+    # Medications & instructions — parse only what is present; never fabricate.
     if "prescribed" in raw_text.lower():
         parts = raw_text.split("prescribed")
         if len(parts) > 1:
             med_part = parts[1].split("take")
-            result["medications"] = [med_part[0].strip()]
+            med = med_part[0].strip()
+            if med:
+                result["medications"] = [med]
             if len(med_part) > 1:
                 result["dosage_instructions"] = f"take {med_part[1].strip()}"
-    else:
-        # Default mock meds
-        result["medications"] = ["Amoxicillin 250mg", "Paracetamol 500mg"]
-        result["dosage_instructions"] = "Twice daily after meals"
+    # If nothing parseable, medications stays [] and dosage stays "N/A" (honest).
 
     return result

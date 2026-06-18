@@ -60,6 +60,28 @@ def load_model() -> None:
     logger.info(f"Donut loaded on {_device}")
 
 
+def _compute_confidence(generate_output) -> float:
+    """
+    Geometric mean of per-token probabilities from Donut's decoder, via
+    `compute_transition_scores`. Returns a real confidence in [0, 1]; 0.0 if
+    scores are unavailable so the document fails honestly to review.
+    """
+    try:
+        transition_scores = _model.compute_transition_scores(
+            generate_output.sequences,
+            generate_output.scores,
+            normalize_logits=True,
+        )
+        token_logprobs = transition_scores[0]
+        finite = token_logprobs[torch.isfinite(token_logprobs)]
+        if finite.numel() == 0:
+            return 0.0
+        return round(float(torch.exp(finite.mean()).item()), 4)
+    except Exception as e:
+        logger.warning(f"Could not compute Donut confidence ({e}); failing to 0.0")
+        return 0.0
+
+
 def _parse_donut_output(text: str) -> dict:
     """
     Parse Donut's raw token output into a structured dict.
@@ -127,6 +149,7 @@ def run_inference(image_path: str) -> DonutOutput:
             use_cache=True,
             num_beams=1,
             bad_words_ids=[[_processor.tokenizer.unk_token_id]],
+            output_scores=True,
             return_dict_in_generate=True,
         )
 
@@ -141,9 +164,10 @@ def run_inference(image_path: str) -> DonutOutput:
 
     structured = _parse_donut_output(sequence)
 
-    # Confidence heuristic: structured output with multiple fields → high confidence
-    n_fields = len([v for v in structured.values() if v])
-    confidence = min(0.60 + (n_fields * 0.05), 0.98)
+    # Real model-derived confidence: geometric mean of per-token probabilities from
+    # the decoder (same approach as TrOCR). Reflects how sure Donut was while
+    # generating the structured sequence; 0.0 if scores are unavailable (fail honestly).
+    confidence = _compute_confidence(outputs)
 
     output = DonutOutput(
         raw_text=sequence,
