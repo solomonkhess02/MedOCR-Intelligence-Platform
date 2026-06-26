@@ -33,11 +33,12 @@ ENV/
 *.ipynb
 
 # ── Current project files (initial state) ────────────────────
-scripts/
 gpu_verify.ipynb
 
 # ── Markdown / Planning docs ──────────────────────────────────
+# Personal planning/study docs stay out of the repo, but the README is tracked.
 *.md
+!README.md
 
 # ── Dataset & Data ────────────────────────────────────────────
 data/
@@ -47,7 +48,6 @@ datasets/
 *.feather
 *.csv
 *.tsv
-*.json
 *.jsonl
 *.pkl
 *.pickle
@@ -55,6 +55,8 @@ datasets/
 *.hdf5
 *.npy
 *.npz
+# NOTE: do NOT blanket-ignore *.json — it would swallow source config
+# (tsconfig, package.json, etc.). Datasets live under data/ which is ignored above.
 
 # ── Images & Documents ────────────────────────────────────────
 *.png
@@ -79,7 +81,9 @@ datasets/
 *.bin
 *.onnx
 *.safetensors
-models/
+# Root-anchored: ignore the ML weight folder at repo root, NOT the
+# backend/app/models/ SQLAlchemy ORM package (which MUST be tracked).
+/models/
 checkpoints/
 mlruns/
 mlartifacts/
@@ -101,6 +105,7 @@ logs/
 .env
 .env.*
 *.env
+!.env.example
 secrets/
 config/local_*.py
 

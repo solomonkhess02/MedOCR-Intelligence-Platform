@@ -66,7 +66,9 @@ def _classify_by_image_properties(image_path: str) -> str:
 
     except Exception as e:
         logger.warning(f"Image property classification failed: {e}")
-        return DOC_TYPE_INVOICE  # safe default
+        # Don't guess a concrete type we can't justify; 'unknown' routes to the
+        # generic TrOCR fallback in the ML pipeline rather than mis-routing to Donut.
+        return DOC_TYPE_UNKNOWN
 
 
 def classify_document(image_path: str, original_filename: str = "") -> str:
