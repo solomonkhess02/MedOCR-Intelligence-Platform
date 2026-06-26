@@ -13,6 +13,8 @@ from langgraph.graph import StateGraph, START, END
 
 from app.agents.state import DocumentIntelligenceState
 from app.agents.document_understanding_agent import run_document_understanding_agent
+from app.agents.quality_control_agent import run_quality_control_agent
+from app.agents.compliance_agent import run_compliance_agent
 from app.agents.medical_summary_agent import run_medical_summary_agent
 from app.agents.anomaly_agent import run_anomaly_agent
 from app.agents.analytics_agent import run_analytics_agent
@@ -43,6 +45,59 @@ def document_understanding_node(
         logger.error(f"Error in document_understanding node: {e}")
         errors = list(state.get("errors") or [])
         errors.append(f"document_understanding node failed: {str(e)}")
+        return {"errors": errors}
+
+
+def quality_control_node(
+    state: DocumentIntelligenceState
+) -> Dict[str, Any]:
+    """Invoke the Quality Control Agent (Agent 06) to validate extracted entities."""
+    logger.info(f"LangGraph: running quality_control node for {state['document_id']}")
+    try:
+        summary, score, passed = run_quality_control_agent(
+            document_id=state["document_id"],
+            doc_type=state["doc_type"],
+            extracted_entities=state["extracted_entities"]
+        )
+
+        agent_outputs = dict(state.get("agent_outputs") or {})
+        agent_outputs["quality_control"] = summary
+
+        return {
+            "agent_outputs": agent_outputs,
+            "quality_score": score,
+            "quality_passed": passed,
+        }
+    except Exception as e:
+        logger.error(f"Error in quality_control node: {e}")
+        errors = list(state.get("errors") or [])
+        errors.append(f"quality_control node failed: {str(e)}")
+        return {"errors": errors}
+
+
+def compliance_node(
+    state: DocumentIntelligenceState
+) -> Dict[str, Any]:
+    """Invoke the Compliance / PII Agent (Agent 07) to scan for PHI/PII and redact."""
+    logger.info(f"LangGraph: running compliance node for {state['document_id']}")
+    try:
+        summary, findings = run_compliance_agent(
+            document_id=state["document_id"],
+            doc_type=state["doc_type"],
+            extracted_entities=state["extracted_entities"]
+        )
+
+        agent_outputs = dict(state.get("agent_outputs") or {})
+        agent_outputs["compliance"] = summary
+
+        return {
+            "agent_outputs": agent_outputs,
+            "pii_findings": findings,
+        }
+    except Exception as e:
+        logger.error(f"Error in compliance node: {e}")
+        errors = list(state.get("errors") or [])
+        errors.append(f"compliance node failed: {str(e)}")
         return {"errors": errors}
 
 
@@ -134,9 +189,9 @@ def executive_report_node(
 
 
 # ── Routing Logic ─────────────────────────────────────────────────────────────
-def route_after_understanding(state: DocumentIntelligenceState) -> str:
+def route_to_summary_or_anomaly(state: DocumentIntelligenceState) -> str:
     """
-    Conditional routing:
+    Conditional routing (after quality control + compliance):
     - If the document is medical ('prescription' or 'lab_report'), route to medical_summary.
     - Otherwise, bypass medical summary and route directly to anomaly_detection.
     """
@@ -152,18 +207,22 @@ builder = StateGraph(DocumentIntelligenceState)
 
 # Add nodes
 builder.add_node("document_understanding", document_understanding_node)
+builder.add_node("quality_control", quality_control_node)
+builder.add_node("compliance", compliance_node)
 builder.add_node("medical_summary", medical_summary_node)
 builder.add_node("anomaly_detection", anomaly_detection_node)
 builder.add_node("analytics", analytics_node)
 builder.add_node("executive_report", executive_report_node)
 
-# Add edges
+# Add edges: understanding → quality control → compliance → (route)
 builder.add_edge(START, "document_understanding")
+builder.add_edge("document_understanding", "quality_control")
+builder.add_edge("quality_control", "compliance")
 
-# Add conditional edge from understanding to summary/anomaly
+# Add conditional edge from compliance to summary/anomaly
 builder.add_conditional_edges(
-    "document_understanding",
-    route_after_understanding,
+    "compliance",
+    route_to_summary_or_anomaly,
     {
         "medical_summary": "medical_summary",
         "anomaly_detection": "anomaly_detection"
@@ -198,6 +257,9 @@ def run_orchestrator(
         "extracted_entities": extracted_entities,
         "agent_outputs": {},
         "guardrail_blocked": False,
+        "quality_score": 0.0,
+        "quality_passed": True,
+        "pii_findings": {},
         "errors": []
     }
 

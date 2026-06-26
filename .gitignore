@@ -101,6 +101,9 @@ redis_data/
 *.log
 logs/
 
+# ── Generated reports (keep the results/ dir via .gitkeep) ─────
+results/*.html
+
 # ── Environment & Secrets ─────────────────────────────────────
 .env
 .env.*

@@ -72,7 +72,7 @@ def run_document_understanding_agent(
 
             explanation = response.content.strip()
 
-            # Attempt to extract token usage if returned by LangChain/Gemini
+            # Attempt to extract token usage if returned by LangChain/DeepSeek
             if response.response_metadata and "token_usage" in response.response_metadata:
                 usage = response.response_metadata["token_usage"]
                 prompt_tokens = usage.get("prompt_tokens", 0)

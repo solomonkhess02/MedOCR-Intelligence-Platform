@@ -37,6 +37,8 @@ it doubles as a hands-on study of Computer Vision + ML + Agentic AI + MLOps.
                        ┌──────────────────────────────────────────────┐
                        │  LangGraph Orchestrator (StateGraph)          │
                        │   document_understanding                      │
+                       │     └→ quality_control (entity validation)    │
+                       │          └→ compliance (PII/PHI redaction)    │
                        │     └─(medical?)→ medical_summary (guardrails)│
                        │            └→ anomaly_detection               │
                        │                  └→ analytics                 │
@@ -107,7 +109,7 @@ API docs: http://localhost:8000/docs · MLflow: http://localhost:5000
 ```
 backend/app/
   api/v1/          FastAPI routes (documents, tasks)
-  agents/          LangGraph orchestrator + 6 agents
+  agents/          LangGraph orchestrator + 8 agents
   ml/              TrOCR / Donut / LayoutLMv3 / OMR inference
   services/        router, confidence gate, embeddings, llm_provider, storage
   models/          SQLAlchemy ORM (documents, ocr_results, chunks, entities, …)
@@ -129,7 +131,9 @@ This is a learning/portfolio project; not every component is production-grade ye
 | API + Celery pipeline           | ✅ Working end-to-end                                         |
 | Confidence gate (real scores)   | ✅ Implemented with `compute_transition_scores`              |
 | pgvector RAG + Database Agent   | ✅ Working (NL→SQL with SELECT-only safety, + similarity)    |
-| LangGraph orchestrator (6 agents) | ✅ Working; medical guardrails enforced                     |
+| LangGraph orchestrator (8 agents) | ✅ Working; medical guardrails enforced                     |
+| Quality Control + Compliance/PII agents | ✅ Entity validation + PHI/PII detection & redaction   |
+| Evidently drift monitoring      | ✅ `scripts/drift_monitor.py` → HTML drift report           |
 | TrOCR (prescriptions)           | 🔧 Fine-tuned, but accuracy still being improved — the target is structured extraction, which is a better fit for a Donut-style model; under active iteration |
 | Donut (invoices)                | 🔧 Base model wired in; fine-tune pending                    |
 | LayoutLMv3 (lab reports)        | 🔧 Base model wired in; weak-supervision fine-tune pending   |

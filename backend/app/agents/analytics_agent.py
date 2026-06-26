@@ -1,7 +1,7 @@
 """
 Agent 03 — Analytics Agent
 Runs SQL aggregation queries to summarize historical counts, spends, and trends,
-and uses Gemini to write high-level business intelligence reports.
+and uses the configured LLM (DeepSeek) to write high-level business intelligence reports.
 """
 
 import time
