@@ -38,6 +38,9 @@ evidently>=0.6.0            # numpy<2.1 constraint — pip will resolve compatib
 # ── Agent / LLM ───────────────────────────────────────────
 langchain==0.3.25
 langgraph==0.4.8
+# Pin langchain-core explicitly: a newer core (>=0.3.40) breaks the langchain-openai
+# 0.3.x line we use (ImportError on ContextOverflowError). Keep these three aligned.
+langchain-core==0.3.35
 # DeepSeek (OpenAI-compatible) is the agent-layer LLM provider.
 # Pin to the 0.3.x line to stay compatible with langchain-core 0.3.x.
 langchain-openai>=0.3,<0.4

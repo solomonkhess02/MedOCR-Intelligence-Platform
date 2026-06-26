@@ -14,6 +14,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.config import get_settings
 from app.database import async_engine
@@ -40,7 +41,7 @@ async def lifespan(app: FastAPI):
 
     # Verify DB connection (will raise on misconfiguration)
     async with async_engine.connect() as conn:
-        await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
+        await conn.execute(text("SELECT 1"))
     logger.info("Database connection verified.")
 
     yield  # ← Application runs here

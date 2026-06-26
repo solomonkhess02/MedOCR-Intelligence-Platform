@@ -341,9 +341,20 @@ def _extract_prescription_entities(raw_text: str) -> dict:
             resp = chain.invoke({"text": raw_text})
             cleaned = resp.content.strip().replace("```json", "").replace("```", "").strip()
             extracted = json.loads(cleaned)
-            return extracted
+
+            # Validate shape before trusting it: the LLM can return valid JSON of the
+            # wrong type (a list) or omit keys. Merge only known keys onto the safe
+            # defaults so malformed responses can't corrupt downstream entities.
+            if not isinstance(extracted, dict):
+                raise ValueError(f"LLM returned non-object JSON: {type(extracted).__name__}")
+            for key in result:
+                if key in extracted and extracted[key] is not None:
+                    result[key] = extracted[key]
+            if not isinstance(result["medications"], list):
+                result["medications"] = [str(result["medications"])]
+            return result
         except Exception as e:
-            logger.warning(f"Gemini prescription entity extraction failed: {e}. Falling back to regex.")
+            logger.warning(f"LLM prescription entity extraction failed: {e}. Falling back to regex.")
 
     # Fallback: Regex parsing
     # Doctor name
