@@ -42,10 +42,10 @@ You have the following tables:
    - document_id: UUID (foreign key to documents.id)
    - entity_type: TEXT
    - entity_data: JSONB (contains extracted fields like:
-       - for invoice: {"vendor": "Name", "amount": 15000, "invoice_no": "INV-1", "date": "2026-06-01"}
-       - for prescription: {"doctor": "Dr. X", "patient": "John", "medications": ["Med1"], "dosage_instructions": "X"}
-       - for lab_report: {"patient": "Jane", "glucose": "180 mg/dL", "hba1c": "8.1%", "wbc": "11.2 K/µL"}
-       - for omr: {"checked_cells": [...], "total_checked": 5}
+       - for invoice: {{"vendor": "Name", "amount": 15000, "invoice_no": "INV-1", "date": "2026-06-01"}}
+       - for prescription: {{"doctor": "Dr. X", "patient": "John", "medications": ["Med1"], "dosage_instructions": "X"}}
+       - for lab_report: {{"patient": "Jane", "glucose": "180 mg/dL", "hba1c": "8.1%", "wbc": "11.2 K/µL"}}
+       - for omr: {{"checked_cells": [...], "total_checked": 5}}
      )
 
 3. ocr_results:
@@ -291,7 +291,7 @@ def _synthesize_response(
             return (
                 f"SQL Query used: `{sql_query}`\n"
                 f"Result: Found {len(sql_results)} records. Details:\n"
-                f"{json.dumps(sql_results, indent=2)}"
+                f"{json.dumps(sql_results, indent=2, default=str)}"
             )
         elif intent == "rag":
             top_hit = rag_results[0] if rag_results else None
@@ -333,8 +333,8 @@ def _synthesize_response(
             "query": query,
             "intent": intent,
             "sql_query": sql_query or "None",
-            "sql_data": json.dumps(sql_results, indent=2),
-            "rag_data": json.dumps(rag_results, indent=2)
+            "sql_data": json.dumps(sql_results, indent=2, default=str),
+            "rag_data": json.dumps(rag_results, indent=2, default=str)
         })
 
         return response.content.strip()
