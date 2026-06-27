@@ -52,31 +52,37 @@ Open these tabs: **API docs** http://localhost:8000/docs · **MLflow** http://lo
 
 ## 2. Demo flow
 
-### (a) Show the ingestion pipeline + confidence gate  *(the "production maturity" beat)*
-Upload a document via the Swagger UI (`POST /api/v1/documents`) or:
+### (a) Live upload → full pipeline → 8 agents  *(the headline — this runs end-to-end live)*
+Upload a prescription via the Swagger UI (`POST /api/v1/documents`) or:
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/documents -F "file=@temp_test/demo_invoice.png;type=image/png"
-# copy the task_id, then:
+curl -X POST http://127.0.0.1:8000/api/v1/documents -F "file=@temp_test/demo_prescription.png;type=image/png"
+# copy the task_id, then poll:
 curl http://127.0.0.1:8000/api/v1/tasks/<TASK_ID>/status
 ```
-**Talking point:** the document is classified, run through the model, and scored with
-*real* confidence (geometric mean of per-token probabilities). Because the base OCR
-models are still being improved, it scores below the 0.75 gate and is flagged
-`needs_review` — **the gate deliberately protects the agent layer from low-quality OCR.**
-That's a feature, not a bug.
+**What happens:** classified as `prescription` → routed to the **fine-tuned Donut** model →
+scored with *real* confidence (geometric mean of per-token probs) ≈ **0.90** → **passes the
+0.75 gate** → status `complete` → the **8-agent LangGraph pipeline runs**:
+- **document_understanding** — plain-English summary
+- **quality_control** — completeness score + LLM plausibility (flags missing fields / a
+  hallucinated medication — a great safety beat)
+- **compliance** — detects & redacts PHI (patient/doctor names), severity high
+- **medical_summary** — guardrailed clinical summary
+- **anomaly_detection**, **analytics**, **executive_report** (PDF)
+- plus the **Database Agent** (NL→SQL + RAG).
 
-### (b) Show the 8-agent AI layer  *(the headline)*
+**Talking points:** (1) the confidence gate is a clinical-safety valve — low-confidence reads
+are flagged `needs_review` and skip the agents; (2) the extraction is imperfect, and the
+quality-control + compliance agents *catch* the problems — defense in depth.
+
+> Try an **invoice** (`temp_test/demo_invoice.png`) too: its confidence is lower, so it gets
+> gated to `needs_review` — a clean way to *show the gate working* both ways.
+
+### (b) Backup: deterministic agent showcase on clean data
+If you want a guaranteed-clean run (e.g. weak Wi-Fi to the LLM, or to show ideal output):
 ```bash
 python scripts/demo_agents.py
 ```
-This seeds one clean, high-confidence invoice (what a fully-trained model yields) and
-runs the **real LangGraph orchestrator** on it. You'll see all agents fire:
-- **document_understanding** — plain-English summary
-- **quality_control** — completeness score + LLM plausibility (catches the future-dated invoice)
-- **compliance** — detects & redacts PII/PHI (email, phone, date)
-- **anomaly_detection** — flags new vendor / duplicate invoice
-- **analytics** + **executive_report** — platform stats + a generated PDF
-- plus the **Database Agent** answering natural-language questions.
+Seeds one clean invoice and runs the same orchestrator — useful as a fallback.
 
 ### (c) Database Agent — natural language → SQL + RAG
 Already shown at the end of `demo_agents.py`. To run ad hoc:
