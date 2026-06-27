@@ -12,6 +12,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import mlflow
@@ -25,6 +26,10 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 MODEL_NAME = "naver-clova-ix/donut-base"
+# Prefer a locally fine-tuned model if one exists (models/donut-finetuned at repo root).
+# Falling back to base donut is honest but produces poor output, so the fine-tuned
+# checkpoint is used automatically once training has saved it.
+_FINETUNED_DIR = Path(__file__).resolve().parents[3] / "models" / "donut-finetuned"
 MODEL_VERSION_TAG = "donut-invoice-v1"
 MLFLOW_EXPERIMENT = "Donut-Invoice"
 
@@ -48,16 +53,24 @@ def _get_device() -> torch.device:
 
 def load_model() -> None:
     """Load Donut processor and model. Called once at worker startup."""
-    global _processor, _model, _device
+    global _processor, _model, _device, MODEL_VERSION_TAG
     if _model is not None:
         return
 
-    logger.info(f"Loading Donut model: {MODEL_NAME}")
+    # Use the fine-tuned checkpoint if present; otherwise fall back to base.
+    if (_FINETUNED_DIR / "config.json").exists():
+        source = str(_FINETUNED_DIR)
+        MODEL_VERSION_TAG = "donut-finetuned-v1"
+        logger.info(f"Loading fine-tuned Donut model from {source}")
+    else:
+        source = MODEL_NAME
+        logger.info(f"Loading base Donut model: {MODEL_NAME} (no fine-tuned model found)")
+
     _device = _get_device()
-    _processor = DonutProcessor.from_pretrained(MODEL_NAME)
-    _model = VisionEncoderDecoderModel.from_pretrained(MODEL_NAME).to(_device)
+    _processor = DonutProcessor.from_pretrained(source)
+    _model = VisionEncoderDecoderModel.from_pretrained(source).to(_device)
     _model.eval()
-    logger.info(f"Donut loaded on {_device}")
+    logger.info(f"Donut loaded on {_device} (version={MODEL_VERSION_TAG})")
 
 
 def _compute_confidence(generate_output) -> float:

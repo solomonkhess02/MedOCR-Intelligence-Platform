@@ -49,7 +49,7 @@ from transformers import (
 )
 
 # Shared invoice filter (same definition used across the project).
-from doc_filters import is_invoice
+from doc_filters import is_invoice, is_prescription
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -67,7 +67,8 @@ EXPERIMENT   = "Donut-FineTuning"
 # Override on the CLI with --image-size WxH. If you still hit CUDA OOM, drop to 640×864.
 IMAGE_SIZE   = [768, 1024]   # [width, height]
 TASK_PROMPT  = "<s_cord-v2>"  # cord-v2 = receipt/structured-doc schema
-MAX_LENGTH   = 512
+MAX_LENGTH   = 192   # prescription/receipt targets max ~130 tokens; 192 = safe headroom,
+                     # no truncation, and far less wasted decoder compute than the old 512.
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -172,6 +173,12 @@ def main():
         help="Filter train/val to invoice/receipt samples only (Donut's domain). Recommended.",
     )
     parser.add_argument(
+        "--prescriptions-only",
+        action="store_true",
+        help="Filter train/val to the 1,000 prescriptions (same subset TrOCR used) so Donut's "
+             "CER can be compared head-to-head against the TrOCR baseline.",
+    )
+    parser.add_argument(
         "--image-size",
         type=str,
         default=None,
@@ -237,6 +244,12 @@ def main():
         train_split = train_split.filter(lambda r: is_invoice(r["text"]))
         val_split   = val_split.filter(lambda r: is_invoice(r["text"]))
         print(f"\n[*] Invoice filter: train {before_tr}->{len(train_split)}, "
+              f"val {before_val}->{len(val_split)}")
+    elif args.prescriptions_only:
+        before_tr, before_val = len(train_split), len(val_split)
+        train_split = train_split.filter(lambda r: is_prescription(r["text"]))
+        val_split   = val_split.filter(lambda r: is_prescription(r["text"]))
+        print(f"\n[*] Prescription filter: train {before_tr}->{len(train_split)}, "
               f"val {before_val}->{len(val_split)}")
 
     batch_size = args.batch_size or 1   # default 1 — safe for 4GB GPUs
