@@ -36,9 +36,10 @@ ENV/
 gpu_verify.ipynb
 
 # ── Markdown / Planning docs ──────────────────────────────────
-# Personal planning/study docs stay out of the repo, but the README is tracked.
+# Personal planning/study docs stay out of the repo, but the README + demo runbook are tracked.
 *.md
 !README.md
+!DEMO.md
 
 # ── Dataset & Data ────────────────────────────────────────────
 data/

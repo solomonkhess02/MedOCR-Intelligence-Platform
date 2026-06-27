@@ -152,6 +152,10 @@ def process_document(self: DocumentProcessingTask, document_id: str) -> dict:
             embedding=full_embedding,
         )
         db.add(ocr_result)
+        # Flush so the DB assigns ocr_result.id (its UUID default is applied at
+        # flush time). Without this, the chunk FK below is set from a None id and
+        # violates the document_chunks.ocr_result_id NOT NULL constraint.
+        db.flush()
 
         # ── Step 6.2: Chunk and Embed Document for RAG ────────────────────────
         chunks = embedding_service.chunk_text(raw_text)
