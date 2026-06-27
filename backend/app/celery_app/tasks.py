@@ -238,13 +238,18 @@ def _run_ml_pipeline(
         (raw_text, confidence, cer, wer, latency_ms, model_version, structured_json)
     """
     if doc_type == "prescription":
-        output = trocr_model.run_inference(image_path)
+        # Prescriptions are routed to the fine-tuned Donut model: the prescription
+        # labels are structured extractions (Donut's domain), and our head-to-head
+        # evaluation showed Donut (CER 0.51) beats TrOCR (CER 0.66) here while
+        # actually recovering fields. The LLM entity extractor then structures
+        # Donut's text output into the prescription schema.
+        output = donut_model.run_inference(image_path)
         structured_json = _extract_prescription_entities(output.raw_text)
         return (
             output.raw_text,
             output.confidence,
-            output.cer,
-            output.wer,
+            None,  # CER/WER computed offline in evaluation, not at serving time
+            None,
             output.latency_ms,
             output.model_version,
             structured_json,

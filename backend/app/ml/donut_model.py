@@ -83,6 +83,7 @@ def _compute_confidence(generate_output) -> float:
         transition_scores = _model.compute_transition_scores(
             generate_output.sequences,
             generate_output.scores,
+            getattr(generate_output, "beam_indices", None),  # required for beam search
             normalize_logits=True,
         )
         token_logprobs = transition_scores[0]
@@ -154,13 +155,13 @@ def run_inference(image_path: str) -> DonutOutput:
         outputs = _model.generate(
             pixel_values,
             decoder_input_ids=decoder_input_ids,
-            max_length=_model.decoder.config.max_position_embeddings,
-            # early_stopping is omitted intentionally: it causes a deprecation warning
-            # when num_beams=1 (greedy decode). Set num_beams>=2 to use early_stopping.
+            max_length=256,                 # targets are short; cap for speed
+            num_beams=4,                    # beam search avoids the greedy degeneration
+            no_repeat_ngram_size=3,         # suppress repetition loops
+            early_stopping=True,
             pad_token_id=_processor.tokenizer.pad_token_id,
             eos_token_id=_processor.tokenizer.eos_token_id,
             use_cache=True,
-            num_beams=1,
             bad_words_ids=[[_processor.tokenizer.unk_token_id]],
             output_scores=True,
             return_dict_in_generate=True,
@@ -172,8 +173,12 @@ def run_inference(image_path: str) -> DonutOutput:
     sequence = sequence.replace(_processor.tokenizer.eos_token, "").replace(
         _processor.tokenizer.pad_token, ""
     )
-    # Remove the task prompt prefix
-    sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()
+    # Strip ALL Donut wrapper tokens/artifacts so raw_text is clean field content
+    # (e.g. "<s_cord-v2><s_text>" and the bracket-less "stext"/"s_text" remnants).
+    sequence = re.sub(r"<[^>]*>", " ", sequence)
+    for artifact in ("s_text", "stext"):
+        sequence = sequence.replace(artifact, " ")
+    sequence = re.sub(r"\s+", " ", sequence).strip()
 
     structured = _parse_donut_output(sequence)
 
