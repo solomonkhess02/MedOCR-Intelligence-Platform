@@ -12,6 +12,15 @@ it doubles as a hands-on study of Computer Vision + ML + Agentic AI + MLOps.
 
 ---
 
+## Demo
+
+[![MedOCR demo walkthrough](https://img.youtube.com/vi/lq-w2N-NXOA/hqdefault.jpg)](https://youtu.be/lq-w2N-NXOA)
+
+A short walkthrough: the imaging dataset, the CV models (TrOCR / Donut / LayoutLMv3 / OpenCV),
+the end-to-end pipeline, and the TrOCR → Donut fine-tuning result. *(Click the thumbnail to watch.)*
+
+---
+
 ## Architecture
 
 ```

@@ -66,7 +66,7 @@ def run_analytics_agent(document_id: UUID) -> str:
 
             chain = prompt | llm
             response = chain.invoke({
-                "stats_json": json.dumps(stats, indent=2)
+                "stats_json": json.dumps(stats, indent=2, default=str)
             })
 
             analytics_report = response.content.strip()
@@ -84,7 +84,7 @@ def run_analytics_agent(document_id: UUID) -> str:
             status = "failed"
             analytics_report = (
                 f"Analytics Agent failure: could not compile report. "
-                f"Raw Stats: {json.dumps(stats)}"
+                f"Raw Stats: {json.dumps(stats, default=str)}"
             )
 
     latency_ms = int((time.perf_counter() - start_time) * 1000)
